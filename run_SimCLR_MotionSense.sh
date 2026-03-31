@@ -1,0 +1,1 @@
+papermill SimCLR_MotionSense.ipynb SimCLR_MotionSense_result.ipynb
