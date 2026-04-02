@@ -253,6 +253,102 @@ def process_uci_har(data_folder_path):
     
     return user_datasets
 
+def process_uci_har_6channels(data_folder_path):
+    """
+    Preprocess the UCI-HAR dataset into the 'user-list' format with 6 channels (acc + gyro)
+    
+    Parameters:
+
+        data_folder_path (str):
+            path to UCI HAR Dataset folder (unzipped)
+
+    Return:
+        
+        user_datasets (dict of {user_id: [(sensor_values, activity_labels)]})
+            the processed dataset in a dictionary, of type {user_id: [(sensor_values, activity_labels)]}
+            the keys of the dictionary is the user_id (participant id)
+            the values of the dictionary are lists of (sensor_values, activity_labels) pairs
+                sensor_values are 2D numpy array of shape (length, channels=6) (acc xyz + gyro xyz)
+                activity_labels are 1D numpy array of shape (length)
+                each trial is a separate entry
+    """
+    # Activity label mapping
+    activity_map = {
+        1: 'WALKING',
+        2: 'WALKING_UPSTAIRS',
+        3: 'WALKING_DOWNSTAIRS',
+        4: 'SITTING',
+        5: 'STANDING',
+        6: 'LAYING'
+    }
+    
+    # Get subject list per split
+    subjects_train = []
+    with open(os.path.join(data_folder_path, 'train/subject_train.txt'), 'r') as f:
+        subjects_train = [int(line.strip()) for line in f]
+    subjects_test = []
+    with open(os.path.join(data_folder_path, 'test/subject_test.txt'), 'r') as f:
+        subjects_test = [int(line.strip()) for line in f]
+    
+    # Load all data per split: acc + gyro
+    acc_x_train = np.loadtxt(os.path.join(data_folder_path, 'train/Inertial Signals/body_acc_x_train.txt'))
+    acc_y_train = np.loadtxt(os.path.join(data_folder_path, 'train/Inertial Signals/body_acc_y_train.txt'))
+    acc_z_train = np.loadtxt(os.path.join(data_folder_path, 'train/Inertial Signals/body_acc_z_train.txt'))
+    gyro_x_train = np.loadtxt(os.path.join(data_folder_path, 'train/Inertial Signals/body_gyro_x_train.txt'))
+    gyro_y_train = np.loadtxt(os.path.join(data_folder_path, 'train/Inertial Signals/body_gyro_y_train.txt'))
+    gyro_z_train = np.loadtxt(os.path.join(data_folder_path, 'train/Inertial Signals/body_gyro_z_train.txt'))
+    Y_train = np.loadtxt(os.path.join(data_folder_path, 'train/y_train.txt'))
+    
+    acc_x_test = np.loadtxt(os.path.join(data_folder_path, 'test/Inertial Signals/body_acc_x_test.txt'))
+    acc_y_test = np.loadtxt(os.path.join(data_folder_path, 'test/Inertial Signals/body_acc_y_test.txt'))
+    acc_z_test = np.loadtxt(os.path.join(data_folder_path, 'test/Inertial Signals/body_acc_z_test.txt'))
+    gyro_x_test = np.loadtxt(os.path.join(data_folder_path, 'test/Inertial Signals/body_gyro_x_test.txt'))
+    gyro_y_test = np.loadtxt(os.path.join(data_folder_path, 'test/Inertial Signals/body_gyro_y_test.txt'))
+    gyro_z_test = np.loadtxt(os.path.join(data_folder_path, 'test/Inertial Signals/body_gyro_z_test.txt'))
+    Y_test = np.loadtxt(os.path.join(data_folder_path, 'test/y_test.txt'))
+    
+    user_datasets = {}
+    
+    # Process training split
+    for i, subject_id in enumerate(subjects_train):
+        if subject_id not in user_datasets:
+            user_datasets[subject_id] = []
+        
+        ax = acc_x_train[i]
+        ay = acc_y_train[i]
+        az = acc_z_train[i]
+        gx = gyro_x_train[i]
+        gy = gyro_y_train[i]
+        gz = gyro_z_train[i]
+        values = np.stack([ax, ay, az, gx, gy, gz], axis=1)  # (128, 6)
+        
+        activity_label = activity_map[int(Y_train[i])]
+        labels = np.repeat(activity_label, values.shape[0])
+        user_datasets[subject_id].append((values, labels))
+    
+    # Process test split
+    for i, subject_id in enumerate(subjects_test):
+        if subject_id not in user_datasets:
+            user_datasets[subject_id] = []
+        
+        ax = acc_x_test[i]
+        ay = acc_y_test[i]
+        az = acc_z_test[i]
+        gx = gyro_x_test[i]
+        gy = gyro_y_test[i]
+        gz = gyro_z_test[i]
+        values = np.stack([ax, ay, az, gx, gy, gz], axis=1)  # (128, 6)
+        
+        activity_label = activity_map[int(Y_test[i])]
+        labels = np.repeat(activity_label, values.shape[0])
+        user_datasets[subject_id].append((values, labels))
+    
+    print(f"Loaded UCI-HAR dataset (6 channels): {len(user_datasets)} users")
+    total_windows = sum(len(user_data) for user_data in user_datasets.values())
+    print(f"Total windows: {total_windows}")
+    
+    return user_datasets
+
 def process_pamap2(data_folder_path):
     """
     Preprocess the PAMAP2 dataset into the 'user-list' format
@@ -332,7 +428,10 @@ def process_pamap2(data_folder_path):
         
         # Group by activity (each activity is a separate trial)
         for activity_id, group in pd.DataFrame(data_np).groupby(0):
-            activity_label = activity_map[int(activity_id)]
+            activity_id = int(activity_id)
+            if activity_id not in activity_map:
+                continue  # Skip activities not in our mapping (optional activities)
+            activity_label = activity_map[activity_id]
             values_activity = group[[1, 2, 3]].values
             labels = np.repeat(activity_label, values_activity.shape[0])
             

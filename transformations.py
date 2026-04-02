@@ -51,13 +51,27 @@ def scaling_transform_vectorized(X, sigma=0.1):
 
 def rotation_transform_vectorized(X):
     """
-    Applying a random 3D rotation
+    Applying a random 3D rotation to all groups of 3 channels
+    Works for multiple 3-channel groups (e.g., 6 channels = acc + gyro, each gets same rotation)
     """
-    axes = np.random.uniform(low=-1, high=1, size=(X.shape[0], X.shape[2]))
+    # X shape: (batch, timesteps, channels)
+    # channels should be divisible by 3
+    assert X.shape[2] % 3 == 0, "Number of channels must be multiple of 3"
+    num_groups = X.shape[2] // 3
+    
+    # Generate one rotation for all groups (same rotation across acc and gyro)
+    axes = np.random.uniform(low=-1, high=1, size=(X.shape[0], 3))
     angles = np.random.uniform(low=-np.pi, high=np.pi, size=(X.shape[0]))
     matrices = axis_angle_to_rotation_matrix_3d_vectorized(axes, angles)
-
-    return np.matmul(X, matrices)
+    
+    # Apply the same rotation to each group of 3 channels
+    X_rotated = np.empty_like(X)
+    for i in range(num_groups):
+        start = i * 3
+        end = (i+1) * 3
+        X_rotated[..., start:end] = np.matmul(X[..., start:end], matrices)
+    
+    return X_rotated
 
 def axis_angle_to_rotation_matrix_3d_vectorized(axes, angles):
     """

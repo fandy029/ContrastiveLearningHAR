@@ -222,8 +222,8 @@ def get_mean_std_from_user_list_format(user_datasets, train_users):
         for data, _ in user_datasets[u]:
             mean_std_data.append(data)
     mean_std_data_combined = np.concatenate(mean_std_data)
-    means = np.mean(mean_std_data_combined, axis=0)
-    stds = np.std(mean_std_data_combined, axis=0)
+    means = np.nanmean(mean_std_data_combined, axis=0)
+    stds = np.nanstd(mean_std_data_combined, axis=0)
     return (means, stds)
 
 def normalise(data, mean, std):
@@ -349,8 +349,11 @@ def pre_process_dataset_composite(user_datasets, label_map, output_shape, train_
     # Step 3
     if normalise_dataset:
         means, stds = get_mean_std_from_user_list_format(user_datasets, train_users)
+        # Replace any remaining NaNs with zero (after normalization)
         train_x = normalise(train_x, means, stds)
+        train_x = np.nan_to_num(train_x)
         test_x = normalise(test_x, means, stds)
+        test_x = np.nan_to_num(test_x)
 
     # Step 4
     train_y_mapped = apply_label_map(train_y, label_map)
